@@ -463,6 +463,14 @@
         .mode-info-btn::before { display: none !important; }
         .mode-info-btn:active { color: rgba(255,255,255,0.6) !important; }
 
+        /* Body scroll lock when overlay is open */
+        body.scroll-locked {
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            /* Preserve scroll position via top */
+        }
+
         /* === ENHANCEMENT STYLES === */
         
         /* Dark mode */
@@ -731,7 +739,7 @@
         </div>
 
         <!-- Main Stats Panel -->
-        <div class="glass rounded-lg p-4 sm:p-6 mb-4">
+        <div id="mainStatsPanel" class="glass rounded-lg p-4 sm:p-6 mb-4">
             <div class="text-center mb-4">
                 <div class="text-xs sm:text-sm text-gray-400">Hunter Rank</div>
                 <div id="levelTitle" class="text-lg sm:text-2xl font-bold text-cyan-400 neon-glow">E-Rank Hunter</div>
@@ -820,7 +828,7 @@
         </div>
 
         <!-- Mode Toggles -->
-        <div class="glass rounded-lg p-2 mb-4 grid grid-cols-3 gap-2">
+        <div id="modeTogglesPanel" class="glass rounded-lg p-2 mb-4 grid grid-cols-3 gap-2">
             <div class="flex flex-col">
                 <button id="stealthBtn" class="mode-card">
                     <div class="mc-bar"></div>
@@ -5472,9 +5480,27 @@
         // ── Tab switching: bottom nav + burger drawer ──
         let _currentTab = 'quests';
 
+        // Tabs that show stats panel alongside content
+        const STATS_VISIBLE_TABS = new Set(['quests']);
+
         function switchTab(tab) {
             _currentTab = tab;
-            // Hide all content panels
+            const showStats = STATS_VISIBLE_TABS.has(tab);
+
+            // Show/hide stats + mode panels
+            const statsPanel = document.getElementById('mainStatsPanel');
+            const modePanel  = document.getElementById('modeTogglesPanel');
+            if (statsPanel) statsPanel.classList.toggle('hidden', !showStats);
+            if (modePanel)  modePanel.classList.toggle('hidden', !showStats);
+
+            // Show/hide home vs burger button in bottom nav
+            const burgerBtn = document.getElementById('bnav-burger');
+            const homeBtn   = document.getElementById('bnav-home');
+            const isHome    = tab === 'quests';
+            if (burgerBtn) burgerBtn.classList.toggle('hidden', !isHome);
+            if (homeBtn)   homeBtn.classList.toggle('hidden', isHome);
+
+            // Hide all content panels, show active
             document.querySelectorAll('.content-panel').forEach(p => p.classList.add('hidden'));
             const panel = document.getElementById(tab);
             if (panel) panel.classList.remove('hidden');
@@ -5484,27 +5510,45 @@
                 const btn = document.getElementById('bnav-' + t);
                 if (btn) btn.classList.toggle('active', t === tab);
             });
-            // Burger "More" button stays unhighlighted when core tab active
-            const burgerBtn = document.getElementById('bnav-burger');
-            if (burgerBtn) {
-                const isCoreTab = ['quests','shadows','store','rewards'].includes(tab);
-                burgerBtn.classList.toggle('active', !isCoreTab);
-            }
+            if (burgerBtn) burgerBtn.classList.toggle('active', !isHome && !['quests','shadows','store','rewards'].includes(tab));
+
             // Update drawer active state
             document.querySelectorAll('.drawer-tab-btn').forEach(b => {
                 b.classList.toggle('active', b.dataset.tab === tab);
             });
 
+            // Scroll content to top on tab switch
+            window.scrollTo(0, 0);
+
             renderActiveTab();
         }
 
+        function goHome() {
+            switchTab('quests');
+        }
+
+        // Track scroll position so lock/unlock is seamless
+        let _scrollY = 0;
+        function lockBodyScroll() {
+            _scrollY = window.scrollY;
+            document.body.style.top = `-${_scrollY}px`;
+            document.body.classList.add('scroll-locked');
+        }
+        function unlockBodyScroll() {
+            document.body.classList.remove('scroll-locked');
+            document.body.style.top = '';
+            window.scrollTo(0, _scrollY);
+        }
+
         function openBurger() {
+            lockBodyScroll();
             document.getElementById('burgerOverlay').classList.add('open');
             document.getElementById('burgerDrawer').classList.add('open');
         }
         function closeBurger() {
             document.getElementById('burgerOverlay').classList.remove('open');
             document.getElementById('burgerDrawer').classList.remove('open');
+            unlockBodyScroll();
         }
 
         // Legacy tab-btn support (in case any inline onclick="switchTab" calls exist)
@@ -5758,6 +5802,7 @@
             if (el('voiceToggle'))            el('voiceToggle').checked = gameState.voiceEnabled !== false;
             if (el('animationsToggle'))       el('animationsToggle').checked = gameState.animationsEnabled !== false;
             m.classList.remove('hidden');
+            lockBodyScroll();
         }
 
         function saveSettingsModal() {
@@ -5772,13 +5817,14 @@
             applyEnhancedSettings();
             saveGame();
             document.getElementById('enhancedSettingsModal').classList.add('hidden');
+            unlockBodyScroll();
             showNotification('⚙️ Settings saved!', 'success');
         }
 
         function closeSettingsModal(evt) {
             // Close if clicking the backdrop
             if (evt && evt.target === document.getElementById('enhancedSettingsModal')) {
-                saveSettingsModal();
+                saveSettingsModal(); // saveSettingsModal handles unlockBodyScroll
             }
         }
 
@@ -6609,6 +6655,9 @@
         </button>
         <button class="bottom-nav-btn" id="bnav-burger" onclick="openBurger()">
             <span class="nav-icon">☰</span>More
+        </button>
+        <button class="bottom-nav-btn hidden" id="bnav-home" onclick="goHome()">
+            <span class="nav-icon">🏠</span>Home
         </button>
     </nav>
 
